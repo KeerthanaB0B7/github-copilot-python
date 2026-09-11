@@ -52,6 +52,8 @@ def count_solutions(board, limit=2):
     """Count valid solutions, stopping when ``limit`` solutions are found."""
     solutions_found = 0
 
+    # Explore the search space recursively and stop once the caller's limit
+    # has been satisfied; this keeps puzzle generation fast enough for the UI.
     def search():
         nonlocal solutions_found
         if solutions_found >= limit:

@@ -220,34 +220,50 @@ function renderPuzzle(puz) {
 /** Fetch and display a new puzzle for the selected difficulty. */
 async function newGame() {
   difficulty = document.getElementById('difficulty').value;
-  const res = await fetch(`/new?difficulty=${encodeURIComponent(difficulty)}`);
-  const data = await res.json();
-  if (data.error) {
-    document.getElementById('message').innerText = data.error;
-    return;
+  const msg = document.getElementById('message');
+
+  try {
+    const res = await fetch(`/new?difficulty=${encodeURIComponent(difficulty)}`);
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      msg.style.color = '#d32f2f';
+      msg.innerText = data.error || 'Unable to load a new puzzle.';
+      return;
+    }
+    renderPuzzle(data.puzzle);
+    msg.innerText = '';
+  } catch (error) {
+    msg.style.color = '#d32f2f';
+    msg.innerText = 'Unable to load a new puzzle.';
   }
-  renderPuzzle(data.puzzle);
-  document.getElementById('message').innerText = '';
 }
 
 /** Reveal one cell using the server's solution and increment the hint count. */
 async function useHint() {
-  const res = await fetch('/hint');
-  const data = await res.json();
   const message = document.getElementById('message');
-  if (data.error) {
-    message.innerText = data.error;
-    return;
+
+  try {
+    const res = await fetch('/hint');
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      message.style.color = '#d32f2f';
+      message.innerText = data.error || 'Unable to use a hint.';
+      return;
+    }
+
+    const input = document.querySelector(
+      `.sudoku-cell[data-row="${data.row}"][data-col="${data.col}"]`,
+    );
+    if (!input || input.disabled) return;
+    input.value = data.value;
+    input.disabled = true;
+    input.classList.add('hinted');
+    hintsUsed += 1;
+    document.getElementById('hint-count').innerText = hintsUsed;
+  } catch (error) {
+    message.style.color = '#d32f2f';
+    message.innerText = 'Unable to use a hint.';
   }
-  const input = document.querySelector(
-    `.sudoku-cell[data-row="${data.row}"][data-col="${data.col}"]`,
-  );
-  if (!input || input.disabled) return;
-  input.value = data.value;
-  input.disabled = true;
-  input.classList.add('hinted');
-  hintsUsed += 1;
-  document.getElementById('hint-count').innerText = hintsUsed;
 }
 
 /** Submit the current board and display validation feedback. */
@@ -263,41 +279,50 @@ async function checkSolution() {
       board[i][j] = val ? parseInt(val, 10) : 0;
     }
   }
-  const res = await fetch('/check', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({board})
-  });
-  const data = await res.json();
+
   const msg = document.getElementById('message');
-  if (data.error) {
+
+  try {
+    const res = await fetch('/check', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({board})
+    });
+    const data = await res.json();
+
+    if (!res.ok || data.error) {
+      msg.style.color = '#d32f2f';
+      msg.innerText = data.error || 'Unable to validate the puzzle.';
+      return;
+    }
+
+    const incorrect = new Set(data.incorrect.map(x => x[0] * SIZE + x[1]));
+    const boardIsComplete = Array.from(inputs).every((inp) => inp.value !== '');
+    for (let idx = 0; idx < inputs.length; idx++) {
+      const inp = inputs[idx];
+      if (inp.disabled) continue;
+      inp.classList.toggle('incorrect', incorrect.has(idx));
+    }
+
+    if (incorrect.size === 0 && boardIsComplete) {
+      msg.style.color = '#388e3c';
+      msg.innerText = 'Congratulations! You solved it!';
+      recordCompletion();
+      return;
+    }
+
+    if (incorrect.size === 0) {
+      msg.style.color = '#d32f2f';
+      msg.innerText = 'All filled cells are correct, but the puzzle is not complete yet.';
+      return;
+    }
+
     msg.style.color = '#d32f2f';
-    msg.innerText = data.error;
-    return;
-  }
-  const incorrect = new Set(data.incorrect.map(x => x[0] * SIZE + x[1]));
-  const boardIsComplete = Array.from(inputs).every((inp) => inp.value !== '');
-  for (let idx = 0; idx < inputs.length; idx++) {
-    const inp = inputs[idx];
-    if (inp.disabled) continue;
-    inp.classList.toggle('incorrect', incorrect.has(idx));
-  }
-
-  if (incorrect.size === 0 && boardIsComplete) {
-    msg.style.color = '#388e3c';
-    msg.innerText = 'Congratulations! You solved it!';
-    recordCompletion();
-    return;
-  }
-
-  if (incorrect.size === 0) {
+    msg.innerText = 'Some cells are incorrect.';
+  } catch (error) {
     msg.style.color = '#d32f2f';
-    msg.innerText = 'All filled cells are correct, but the puzzle is not complete yet.';
-    return;
+    msg.innerText = 'Unable to validate the puzzle.';
   }
-
-  msg.style.color = '#d32f2f';
-  msg.innerText = 'Some cells are incorrect.';
 }
 
 // Wire buttons

@@ -46,12 +46,20 @@ def index():
 @app.route('/new')
 def new_game():
     """Generate and return a new puzzle for the requested difficulty."""
-    difficulty = request.args.get('difficulty', 'medium').lower()
+    difficulty = request.args.get('difficulty', 'medium')
+    if difficulty is None:
+        difficulty = 'medium'
+    difficulty = difficulty.lower()
+
     clues = DIFFICULTY_CLUES.get(difficulty)
     if clues is None:
         return jsonify({'error': 'Invalid difficulty'}), 400
 
-    puzzle, solution = sudoku_logic.generate_puzzle(clues)
+    try:
+        puzzle, solution = sudoku_logic.generate_puzzle(clues)
+    except Exception:
+        return jsonify({'error': 'Unable to generate puzzle'}), 500
+
     CURRENT['puzzle'] = puzzle
     CURRENT['solution'] = solution
     return jsonify({'difficulty': difficulty, 'puzzle': puzzle})
@@ -60,7 +68,10 @@ def new_game():
 @app.route('/check', methods=['POST'])
 def check_solution():
     """Check the submitted board and return the locations of incorrect cells."""
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        data = {}
+
     board = data.get('board')
 
     try:
